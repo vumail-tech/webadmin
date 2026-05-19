@@ -3,9 +3,18 @@ import dynamic from "next/dynamic";
 import { MailHealthRadial } from "./mail-health";
 import { ApexOptions } from "apexcharts";
 import { card_className } from "./config";
-import { Send, Inbox, AlertTriangle, Clock, XCircle, Activity } from "lucide-react";
+import { Send, Inbox, AlertTriangle, Clock, XCircle } from "lucide-react";
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
+
+interface MonthlyBucket {
+  year: number;
+  month: number; // 1–12
+  sent: number;
+  received: number;
+  deferred: number;
+  rejected: number;
+}
 
 interface Metrics {
   sent?: number;
@@ -22,9 +31,10 @@ interface Metrics {
   };
   periodStart?: string;
   periodEnd?: string;
+  monthly?: MonthlyBucket[];
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function StatCard({
   icon: Icon,
@@ -58,25 +68,32 @@ function StatCard({
 export const DomainOverview = ({ metrics }: { metrics: Metrics | null }) => {
   const m = metrics || {};
 
-  // Build a simple bar chart series from available data
-  const sentVal = m.sent ?? 0;
-  const receivedVal = m.received ?? 0;
+  // Build bar chart from real monthly data stored in metrics.monthly.
+  // Show current year; fall back to the years present in the data if none match.
+  const currentYear = new Date().getFullYear();
+  const monthly = m.monthly ?? [];
 
-  // Spread evenly across months for visualization (real: would be time-series)
-  const distributedSent = MONTHS.map((_, i) =>
-    Math.round((sentVal / 12) * (0.7 + Math.sin(i + 1) * 0.3))
+  // Determine which year to display: prefer current year, else the latest year in data
+  const yearsInData = [...new Set(monthly.map((b) => b.year))].sort((a, b) => b - a);
+  const displayYear = yearsInData.includes(currentYear) ? currentYear : (yearsInData[0] ?? currentYear);
+
+  const byMonth = new Map(
+    monthly.filter((b) => b.year === displayYear).map((b) => [b.month, b])
   );
-  const distributedReceived = MONTHS.map((_, i) =>
-    Math.round((receivedVal / 12) * (0.7 + Math.sin(i + 2) * 0.3))
-  );
+
+  const chartCategories = MONTH_LABELS.map((lbl, i) => `${lbl} ${displayYear}`);
+  const distributedSent = MONTH_LABELS.map((_, i) => byMonth.get(i + 1)?.sent ?? 0);
+  const distributedReceived = MONTH_LABELS.map((_, i) => byMonth.get(i + 1)?.received ?? 0);
+
+  const hasChartData = distributedSent.some((v) => v > 0) || distributedReceived.some((v) => v > 0);
 
   const barOptions: ApexOptions = {
     chart: { type: "bar", height: 280, toolbar: { show: false }, fontFamily: "Outfit, sans-serif" },
     colors: ["#465FFF", "#9CB9FF"],
     plotOptions: { bar: { horizontal: false, columnWidth: "40%", borderRadius: 4 } },
     dataLabels: { enabled: false },
-    xaxis: { categories: MONTHS, axisBorder: { show: false }, axisTicks: { show: false } },
-    yaxis: { title: { text: "Emails" } },
+    xaxis: { categories: chartCategories, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { title: { text: "Emails" }, min: 0 },
     legend: { show: true, position: "top", horizontalAlign: "left" },
     grid: { yaxis: { lines: { show: true } } },
     tooltip: { y: { formatter: (v) => `${v} emails` } },
@@ -142,10 +159,19 @@ export const DomainOverview = ({ metrics }: { metrics: Metrics | null }) => {
 
       {/* Sent/Received Bar Chart */}
       <div className={card_className}>
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">
-          Sent &amp; Received — Monthly Distribution
-        </h3>
-        <ReactApexChart options={barOptions} series={barSeries} type="bar" height={280} />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+            Sent &amp; Received — Monthly Distribution
+          </h3>
+          <span className="text-xs text-gray-400 dark:text-gray-500">{displayYear}</span>
+        </div>
+        {hasChartData ? (
+          <ReactApexChart options={barOptions} series={barSeries} type="bar" height={280} />
+        ) : (
+          <div className="flex items-center justify-center h-[280px] text-gray-400 dark:text-gray-600 text-sm">
+            No mail traffic data yet for {displayYear}
+          </div>
+        )}
       </div>
     </div>
   );

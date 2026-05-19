@@ -5,9 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
-import { generatePassword } from "@/lib/generate-password";
-import { addMailbox } from "@/api/mailbox";
-import { Check, Copy } from "lucide-react";
+import { adminCreateMailbox, adminGetMailSettings } from "@/api/admin";
+import { Check, Copy, Download } from "lucide-react";
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -25,13 +24,15 @@ export default function AddUserModal({
   const [localPart, setLocalPart] = useState("");
   const [name, setName] = useState("");
   const [tags, setTags] = useState("");
-  const [stage, setStage] = useState(0)
+  const [stage, setStage] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [generatedPassword, setGeneratedPassword] = useState("");
-  const [copied, setCopied] = useState<"email" | "password" | null>(null);
+  const [mailboxId, setMailboxId] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"email" | "password" | "instructions" | null>(null);
+  const [mailHost, setMailHost] = useState("");
 
 
   const isValidLocalPart = (value: string) =>
@@ -40,63 +41,94 @@ export default function AddUserModal({
   const handleSubmit = async () => {
     const cleanLocalPart = localPart.trim().toLowerCase();
 
-    if (!cleanLocalPart) {
-      setError("Email username is required");
-      return;
-    }
-
-    if (!isValidLocalPart(cleanLocalPart)) {
-      setError("Only letters, numbers, dots and dashes allowed");
-      return;
-    }
-
-    if (!name.trim()) {
-      setError("Full name is required");
-      return;
-    }
-
-    const password = generatePassword(8);
-    setGeneratedPassword(password);
-
-    const payload = {
-      localPart: cleanLocalPart,
-      name: name.trim(),
-      password,
-      tags: tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-    };
-
+    if (!cleanLocalPart) { setError("Email username is required"); return; }
+    if (!isValidLocalPart(cleanLocalPart)) { setError("Only letters, numbers, dots and dashes allowed"); return; }
+    if (!name.trim()) { setError("Full name is required"); return; }
 
     try {
       setLoading(true);
       setError(null);
 
-      const rs = await addMailbox(domain, payload);
+      const rs = await adminCreateMailbox(domain, {
+        localPart: cleanLocalPart,
+        name: name.trim(),
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+      });
 
       if (!rs.success) {
         setError(rs.message);
       } else {
-        // onClose();
-        setStage(1)
+        setGeneratedPassword(rs.data.generatedPassword);
+        setMailboxId(rs.data.mailbox._id);
+        const settings = await adminGetMailSettings();
+        if (settings?.success) setMailHost(settings.data.host);
+        setStage(1);
         router.refresh();
-        console.log("ADD TOAST: User created", password);
       }
-    } catch (err) {
+    } catch {
       setError("Failed to create user. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleDownloadConfig = () => {
+    if (!mailboxId) return;
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/api/admin/domains/${domain}/mailboxes/${mailboxId}/mobileconfig`;
+    window.open(url, "_blank");
+  };
+
+  const buildInstructions = () => {
+    const email = `${localPart}@${domain}`;
+    const host = mailHost || "mail.yourdomain.com";
+    return `Hi ${name},
+
+Your email account is ready. Here are your login credentials and setup instructions — please keep them safe.
+
+─────────────────────────────
+  EMAIL:    ${email}
+  PASSWORD: ${generatedPassword}
+─────────────────────────────
+
+━━━ GMAIL APP (Android / iOS) ━━━
+1. Open Gmail → tap your profile picture → "Add another account"
+2. Choose "Other" at the bottom
+3. Enter your email address, tap Next
+4. Choose IMAP
+5. Enter your password when prompted
+
+   Incoming (IMAP)
+   Server:   ${host}
+   Port:     993
+   Security: SSL/TLS
+
+   Outgoing (SMTP)
+   Server:   ${host}
+   Port:     587
+   Security: STARTTLS
+   Username: ${email}
+   Password: (same as above)
+
+━━━ OUTLOOK (Desktop / Mobile) ━━━
+1. Go to File → Add Account (desktop) or tap + (mobile)
+2. Enter your email and tap "Advanced setup"
+3. Choose IMAP
+4. Use the same server settings above
+
+━━━ iOS (Apple Mail) ━━━
+Use the configuration profile link provided by your admin for automatic setup.
+
+─────────────────────────────
+If you have any issues, contact your administrator.`;
+  };
+
   const copyToClipboard = async (
     value: string,
-    type: "email" | "password"
+    type: "email" | "password" | "instructions"
   ) => {
     await navigator.clipboard.writeText(value);
     setCopied(type);
-    setTimeout(() => setCopied(null), 1500);
+    setTimeout(() => setCopied(null), 2000);
   };
 
 
@@ -233,6 +265,37 @@ export default function AddUserModal({
 
           </div>
 
+          {/* Setup instructions */}
+          <div className="space-y-2 text-left">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                Setup instructions (copy &amp; send to user)
+              </label>
+              <button
+                onClick={() => copyToClipboard(buildInstructions(), "instructions")}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+              >
+                {copied === "instructions" ? (
+                  <><Check size={12} className="text-green-600" /> Copied</>
+                ) : (
+                  <><Copy size={12} /> Copy text</>
+                )}
+              </button>
+            </div>
+            <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg px-3 py-3 whitespace-pre-wrap max-h-48 overflow-y-auto font-mono leading-relaxed">
+              {buildInstructions()}
+            </pre>
+          </div>
+
+          {/* Download config (iOS) */}
+          <button
+            onClick={handleDownloadConfig}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+          >
+            <Download size={14} />
+            Download iOS Config (.mobileconfig)
+          </button>
+
           {/* Close */}
           <Button
             onClick={() => {
@@ -241,7 +304,9 @@ export default function AddUserModal({
               setName("");
               setTags("");
               setGeneratedPassword("");
+              setMailboxId(null);
               setCopied(null);
+              setMailHost("");
               onClose();
             }}
             className="w-full"

@@ -87,7 +87,7 @@ export const Modal: React.FC<ModalProps> = ({
             </svg>
           </button>
         )}
-        <div>{children}</div>
+        <div className={showCloseButton ? "pr-10 sm:pr-12" : ""}>{children}</div>
       </div>
     </div>
   );

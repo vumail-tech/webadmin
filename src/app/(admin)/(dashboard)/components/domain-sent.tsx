@@ -1,59 +1,54 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Calendar } from "lucide-react";
 import { ApexOptions } from "apexcharts";
-import flatpickr from "flatpickr";
-import ChartTab from "@/components/common/ChartTab";
 import { getDashboardStats } from "@/api/admin";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const COLORS = ["#465FFF", "#9CB9FF", "#FF6B6B", "#FFA94D", "#34D399", "#A78BFA"];
 
+interface MonthBucket { year: number; month: number; sent: number; received: number }
+
 export function SentByDomainChart() {
-  const datePickerRef = useRef<HTMLInputElement>(null);
   const [series, setSeries] = useState<{ name: string; data: number[] }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [displayYear, setDisplayYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
-    const fetch = async () => {
-      try {
-        const rs = await getDashboardStats();
-        if (rs?.success) {
-          const domains: { domain: string; sent: number }[] = rs.data.domains || [];
-          // Build sparkline series — single value per domain (total sent)
-          const chartSeries = domains.slice(0, 6).map((d, i) => ({
-            name: d.domain,
-            // Distribute across months for visual interest (real data would be time-series)
-            data: MONTHS.map((_, idx) =>
-              Math.round((d.sent / 12) * (0.7 + Math.sin(idx + i) * 0.3))
-            ),
-          }));
-          setSeries(chartSeries.length ? chartSeries : [{ name: "No data", data: MONTHS.map(() => 0) }]);
+    getDashboardStats()
+      .then((rs) => {
+        if (!rs?.success) return;
+        const domains: { domain: string; sent: number; monthly: MonthBucket[] }[] = rs.data.domains || [];
+
+        const currentYear = new Date().getFullYear();
+        // Pick the year that has the most data across all domains
+        const yearCounts = new Map<number, number>();
+        for (const d of domains) {
+          for (const b of d.monthly || []) {
+            yearCounts.set(b.year, (yearCounts.get(b.year) || 0) + b.sent);
+          }
         }
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
+        const years = [...yearCounts.entries()].sort((a, b) => b[1] - a[1]);
+        const year = years.length ? years[0][0] : currentYear;
+        setDisplayYear(year);
 
-  useEffect(() => {
-    if (!datePickerRef.current) return;
-    const today = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(today.getDate() - 6);
-    const fp = flatpickr(datePickerRef.current, {
-      mode: "range",
-      static: true,
-      monthSelectorType: "static",
-      dateFormat: "M d",
-      defaultDate: [sevenDaysAgo, today],
-      clickOpens: true,
-    });
-    return () => { if (!Array.isArray(fp)) fp.destroy(); };
+        const chartSeries = domains
+          .filter((d) => d.sent > 0 || d.monthly?.some((b) => b.sent > 0))
+          .slice(0, 6)
+          .map((d) => {
+            const byMonth = new Map((d.monthly || []).filter((b) => b.year === year).map((b) => [b.month, b]));
+            return {
+              name: d.domain,
+              data: MONTH_LABELS.map((_, i) => byMonth.get(i + 1)?.sent ?? 0),
+            };
+          });
+
+        setSeries(chartSeries.length ? chartSeries : [{ name: "No data", data: MONTH_LABELS.map(() => 0) }]);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const options: ApexOptions = {
@@ -71,12 +66,13 @@ export function SentByDomainChart() {
     grid: { yaxis: { lines: { show: true } }, xaxis: { lines: { show: false } } },
     xaxis: {
       type: "category",
-      categories: MONTHS,
+      categories: MONTH_LABELS,
       axisBorder: { show: false },
       axisTicks: { show: false },
       tooltip: { enabled: false },
     },
     yaxis: {
+      min: 0,
       title: { text: "Sent Emails", style: { fontSize: "12px" } },
       labels: { style: { fontSize: "12px", colors: ["#6B7280"] } },
     },
@@ -92,23 +88,12 @@ export function SentByDomainChart() {
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white px-5 pb-5 pt-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
-      <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
-        <div className="w-full">
+      <div className="flex flex-col gap-1 mb-6 sm:flex-row sm:justify-between sm:items-start">
+        <div>
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Sent by Domain</h3>
           <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
-            Email sending trends per domain
+            Monthly sending trends per domain — {displayYear}
           </p>
-        </div>
-        <div className="flex items-center gap-3 sm:justify-end">
-          <ChartTab />
-          <div className="relative inline-flex items-center">
-            <Calendar className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-3 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none z-10" />
-            <input
-              ref={datePickerRef}
-              className="h-10 w-10 lg:w-40 lg:h-auto lg:pl-10 lg:pr-3 lg:py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-transparent lg:text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-800 dark:lg:text-gray-300 cursor-pointer"
-              placeholder="Select date range"
-            />
-          </div>
         </div>
       </div>
 

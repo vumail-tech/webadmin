@@ -16,6 +16,7 @@ interface Alias {
   active: boolean;
   mailbox: string;
   mailboxId: string;
+  goto: string[];
 }
 
 export default function AliasesTab() {
@@ -28,7 +29,7 @@ export default function AliasesTab() {
   const [deleting, setDeleting] = useState(false);
 
   // Add form state
-  const [selectedMailbox, setSelectedMailbox] = useState("");
+  const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
   const [aliasLocal, setAliasLocal] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -50,20 +51,26 @@ export default function AliasesTab() {
 
   useEffect(() => { if (domain) fetchAll(); }, [domain]);
 
+  const toggleMailboxSelection = (email: string) => {
+    setSelectedMailboxes((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+    );
+  };
+
   const handleAdd = async () => {
-    if (!selectedMailbox || !aliasLocal.trim()) {
-      setAddError("Mailbox and alias name are required");
+    if (!selectedMailboxes.length || !aliasLocal.trim()) {
+      setAddError("Select at least one mailbox and enter an alias name");
       return;
     }
     const alias = `${aliasLocal.trim()}@${domain}`;
     setAddLoading(true);
     setAddError(null);
     try {
-      const rs = await adminAddAlias(domain, { mailboxAddress: selectedMailbox, alias });
+      const rs = await adminAddAlias(domain, { mailboxAddresses: selectedMailboxes, alias });
       if (rs?.success) {
         setIsOpen(false);
         setAliasLocal("");
-        setSelectedMailbox("");
+        setSelectedMailboxes([]);
         fetchAll();
       } else {
         setAddError(rs?.message || "Failed to add alias");
@@ -153,7 +160,16 @@ export default function AliasesTab() {
                     <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">
                       {alias.address}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{alias.mailbox}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {(alias.goto?.length ? alias.goto : [alias.mailbox]).map((addr) => (
+                        <span
+                          key={addr}
+                          className="inline-block bg-gray-100 dark:bg-gray-700 text-xs rounded px-1.5 py-0.5 mr-1 mb-0.5"
+                        >
+                          {addr}
+                        </span>
+                      ))}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -201,17 +217,37 @@ export default function AliasesTab() {
           <h2 className="font-semibold text-lg text-gray-800 dark:text-white">Add Alias</h2>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Delivers to mailbox</label>
-            <select
-              value={selectedMailbox}
-              onChange={(e) => setSelectedMailbox(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm dark:bg-gray-800 dark:text-white"
-            >
-              <option value="">Select mailbox…</option>
-              {mailboxes.map((m: any) => (
-                <option key={m.email || m.id} value={m.email}>{m.email}</option>
-              ))}
-            </select>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Delivers to mailbox{mailboxes.length > 1 ? "es" : ""} (select one or more)
+            </label>
+            <div className="rounded-lg border border-gray-300 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 max-h-48 overflow-y-auto">
+              {mailboxes.map((m: any) => {
+                const email = m.email || m.address;
+                const checked = selectedMailboxes.includes(email);
+                return (
+                  <label
+                    key={email}
+                    className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleMailboxSelection(email)}
+                      className="accent-blue-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{email}</span>
+                  </label>
+                );
+              })}
+              {mailboxes.length === 0 && (
+                <p className="px-3 py-2 text-sm text-gray-400">No mailboxes found</p>
+              )}
+            </div>
+            {selectedMailboxes.length > 0 && (
+              <p className="text-xs text-gray-500">
+                Selected: {selectedMailboxes.join(", ")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -225,7 +261,10 @@ export default function AliasesTab() {
           {addError && <p className="text-sm text-red-500">{addError}</p>}
 
           <div className="grid grid-cols-2 gap-2 pt-2">
-            <button onClick={() => setIsOpen(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+            <button
+              onClick={() => { setIsOpen(false); setSelectedMailboxes([]); setAliasLocal(""); }}
+              className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
               Cancel
             </button>
             <Button onClick={handleAdd} disabled={addLoading}>

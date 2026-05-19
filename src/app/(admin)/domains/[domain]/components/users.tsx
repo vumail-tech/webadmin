@@ -6,13 +6,15 @@ import { cn } from "@/lib/utils";
 import { card_className } from "./config";
 import { useModal } from "@/hooks/useModal";
 import AddUserModal from "./add-user";
-import { Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, KeyRound } from "lucide-react";
+import { SignatureModal } from "./signature-modal";
+import { Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, AlertTriangle, PenLine } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { adminGetMailboxes, adminDeleteMailbox, adminUpdateMailbox } from "@/api/admin";
 import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
+import Link from "next/link";
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -30,18 +32,19 @@ type Mailbox = {
   sentStats: number[];
 };
 
-export function UsersTable() {
+export function UsersTable({ domainStatus }: { domainStatus?: string }) {
   const { openModal, isOpen, closeModal } = useModal();
   const domain = useParams().domain as string;
+  const isVerified = domainStatus === "ACTIVE";
 
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [loading, setLoading] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Modals
   const [editTarget, setEditTarget] = useState<Mailbox | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Mailbox | null>(null);
+  const [signatureTarget, setSignatureTarget] = useState<Mailbox | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editQuota, setEditQuota] = useState("");
   const [editActive, setEditActive] = useState(true);
@@ -61,8 +64,9 @@ export function UsersTable() {
   useEffect(() => { if (domain) fetchMailboxes(); }, [domain]);
 
   useEffect(() => {
+    if (!openMenu) return;
     const handler = (e: MouseEvent) => {
-      if (openMenu && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (!(e.target as Element).closest("[data-menu-container]")) {
         setOpenMenu(null);
       }
     };
@@ -119,6 +123,23 @@ export function UsersTable() {
 
   return (
     <>
+      {!isVerified && (
+        <div className="flex items-start gap-3 rounded-xl border border-yellow-200 bg-yellow-50 dark:border-yellow-800/40 dark:bg-yellow-900/10 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>
+            DNS records must be verified before adding mailboxes.{" "}
+            <button
+              onClick={() => {
+                const el = document.querySelector('[data-tab="records"]') as HTMLElement;
+                el?.click();
+              }}
+              className="underline font-medium"
+            >
+              Go to Records tab to verify.
+            </button>
+          </span>
+        </div>
+      )}
       <div className={cn("overflow-x-auto", card_className)}>
         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
@@ -132,8 +153,15 @@ export function UsersTable() {
               <RefreshCw size={14} className={loading ? "animate-spin text-gray-400" : "text-gray-500"} />
             </button>
             <button
-              onClick={openModal}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              onClick={isVerified ? openModal : undefined}
+              disabled={!isVerified}
+              title={!isVerified ? "Verify DNS records first" : undefined}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 text-sm rounded-lg",
+                isVerified
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed"
+              )}
             >
               <Plus size={14} /> Add Mailbox
             </button>
@@ -213,7 +241,7 @@ export function UsersTable() {
                       />
                     </td>
                     <td className={`${row_className} relative`}>
-                      <div ref={menuRef} className="inline-block">
+                      <div className="inline-block" data-menu-container>
                         <button
                           onClick={() => setOpenMenu(openMenu === mb.id ? null : mb.id)}
                           className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -228,6 +256,12 @@ export function UsersTable() {
                               className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
                             >
                               <Pencil size={13} /> Edit
+                            </button>
+                            <button
+                              onClick={() => { setSignatureTarget(mb); setOpenMenu(null); }}
+                              className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <PenLine size={13} /> Signature
                             </button>
                             <button
                               onClick={() => { setDeleteTarget(mb); setOpenMenu(null); }}
@@ -302,6 +336,18 @@ export function UsersTable() {
           </div>
         </div>
       </Modal>
+
+      {/* Signature Editor */}
+      {signatureTarget && (
+        <SignatureModal
+          isOpen={!!signatureTarget}
+          onClose={() => setSignatureTarget(null)}
+          domain={domain}
+          mailboxId={signatureTarget.id}
+          mailboxEmail={signatureTarget.email}
+          mailboxName={signatureTarget.name}
+        />
+      )}
     </>
   );
 }

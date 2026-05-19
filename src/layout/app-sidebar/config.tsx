@@ -27,19 +27,16 @@ export const MAIN_NAV: NavItem[] = [
 ];
 
 export const SUB_NAV: NavItem[] = [
-
   {
     name: "Transactional Email",
     icon: <Mail />,
-    path: "#",
+    path: "/transactional",
   },
-
   {
     name: "Marketing Email",
     icon: <Send />,
-    path: "#",
+    path: "/marketing",
   },
-
   {
     name: "Bulk SMS",
     icon: <MessageSquare />,

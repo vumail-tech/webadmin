@@ -45,6 +45,9 @@ export const adminUpdateMailbox = (
 export const adminDeleteMailbox = (domain: string, mailboxId: string) =>
   deleteDoc(`${BASE}/domains/${domain}/mailboxes/${mailboxId}`);
 
+export const adminResetMailboxPassword = (domain: string, mailboxId: string) =>
+  postDoc(`${BASE}/domains/${domain}/mailboxes/${mailboxId}/reset-password`, {});
+
 export const adminGetSignature = (domain: string, mailboxId: string) =>
   getDoc(`${BASE}/domains/${domain}/mailboxes/${mailboxId}/signature`);
 

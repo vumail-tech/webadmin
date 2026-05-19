@@ -7,10 +7,10 @@ import { card_className } from "./config";
 import { useModal } from "@/hooks/useModal";
 import AddUserModal from "./add-user";
 import { SignatureModal } from "./signature-modal";
-import { Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, AlertTriangle, PenLine } from "lucide-react";
+import { Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, AlertTriangle, PenLine, KeyRound, Copy, Check } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { adminGetMailboxes, adminDeleteMailbox, adminUpdateMailbox } from "@/api/admin";
+import { adminGetMailboxes, adminDeleteMailbox, adminUpdateMailbox, adminResetMailboxPassword } from "@/api/admin";
 import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
@@ -49,6 +49,12 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
   const [editQuota, setEditQuota] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
+
+  // Reset password
+  const [resetTarget, setResetTarget] = useState<Mailbox | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const fetchMailboxes = async () => {
     setLoading(true);
@@ -106,6 +112,23 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
     setEditQuota(String(mb.quotaMB));
     setEditActive(mb.active);
     setOpenMenu(null);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTarget) return;
+    setResetting(true);
+    try {
+      const rs = await adminResetMailboxPassword(domain, resetTarget.id);
+      if (rs?.success) setNewPassword(rs.data.password);
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(newPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const sparklineOptions: ApexOptions = {
@@ -264,6 +287,12 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
                               <PenLine size={13} /> Signature
                             </button>
                             <button
+                              onClick={() => { setResetTarget(mb); setNewPassword(""); setCopied(false); setOpenMenu(null); }}
+                              className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <KeyRound size={13} /> Reset Password
+                            </button>
+                            <button
                               onClick={() => { setDeleteTarget(mb); setOpenMenu(null); }}
                               className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                             >
@@ -334,6 +363,57 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
               {deleting ? "Deleting…" : "Delete"}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Reset Password Modal */}
+      <Modal isOpen={!!resetTarget} onClose={() => { setResetTarget(null); setNewPassword(""); }} className="max-w-md">
+        <div className="space-y-4">
+          <h2 className="font-semibold text-lg text-gray-800 dark:text-white">Reset Password</h2>
+          <p className="text-sm text-gray-500">{resetTarget?.email}</p>
+
+          {!newPassword ? (
+            <>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                A new password will be generated and applied to both the mailbox and the user account.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setResetTarget(null)}
+                  className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <Button onClick={handleResetPassword} disabled={resetting}>
+                  {resetting ? "Resetting…" : "Reset Password"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                Password reset successfully. Copy and share it with the user.
+              </p>
+              <div className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2">
+                <code className="flex-1 text-sm font-mono text-gray-800 dark:text-gray-200 break-all">
+                  {newPassword}
+                </code>
+                <button
+                  onClick={handleCopy}
+                  className="shrink-0 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500"
+                  title="Copy"
+                >
+                  {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                </button>
+              </div>
+              <button
+                onClick={() => { setResetTarget(null); setNewPassword(""); }}
+                className="w-full px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Done
+              </button>
+            </>
+          )}
         </div>
       </Modal>
 

@@ -148,6 +148,12 @@ export const adminBulkMigration = (
   }
 ) => postDoc(`${BASE}/domains/${domain}/migration/bulk`, data);
 
+export const adminGetMigrationJobs = (domain: string) =>
+  getDoc(`${BASE}/domains/${domain}/migration/jobs`);
+
+export const adminGetMigrationJob = (domain: string, jobId: string) =>
+  getDoc(`${BASE}/domains/${domain}/migration/jobs/${encodeURIComponent(jobId)}`);
+
 // ─── Transactional Email ──────────────────────────────────────────────────────
 export const adminGetTransactionalKeys = () =>
   getDoc(`${BASE}/transactional/keys`);

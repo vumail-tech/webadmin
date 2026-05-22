@@ -154,6 +154,9 @@ export const adminGetMigrationJobs = (domain: string) =>
 export const adminGetMigrationJob = (domain: string, jobId: string) =>
   getDoc(`${BASE}/domains/${domain}/migration/jobs/${encodeURIComponent(jobId)}`);
 
+export const adminTestMigrationDestination = (domain: string) =>
+  getDoc(`${BASE}/domains/${domain}/migration/dst-test`);
+
 // ─── Transactional Email ──────────────────────────────────────────────────────
 export const adminGetTransactionalKeys = () =>
   getDoc(`${BASE}/transactional/keys`);

@@ -26,6 +26,7 @@ import {
   adminBulkMigration,
   adminGetMigrationJobs,
   adminGetMigrationJob,
+  adminTestMigrationDestination,
 } from "@/api/admin";
 import { card_className } from "./config";
 
@@ -389,6 +390,10 @@ export default function MigrationTab() {
     message?: string;
   } | null>(null);
 
+  // Destination (mailcow) connectivity check
+  const [dstTestState, setDstTestState] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [dstTestMsg, setDstTestMsg] = useState<string | null>(null);
+
   const [scope, setScope] = useState<"all" | "selected">("all");
   const [mailboxes, setMailboxes] = useState<string[]>([]);
   const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
@@ -400,13 +405,15 @@ export default function MigrationTab() {
   const [maxSizeMB, setMaxSizeMB] = useState("50");
   const [dryRun, setDryRun] = useState(false);
 
-  // Active job tracking
+  // Active job tracking (single migration progress panel)
   const [activeJob, setActiveJob] = useState<MigrationJobRecord | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // History
   const [historyJobs, setHistoryJobs] = useState<MigrationJobRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  // Polls the full history list until all jobs have settled
+  const historyPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const set =
     (key: keyof ConnectionForm) =>
@@ -428,10 +435,40 @@ export default function MigrationTab() {
     loadHistory();
   }, [loadHistory]);
 
-  // Polling: refresh active job every 2.5s while running/pending
+  // History poller: refreshes the list every 2.5s until no jobs are pending/running.
+  // Used by both single and bulk migrations so the history table always stays live.
+  const startHistoryPoll = useCallback(() => {
+    if (historyPollRef.current) return; // already running
+    historyPollRef.current = setInterval(async () => {
+      try {
+        const res = await adminGetMigrationJobs(domain);
+        if (res?.success) {
+          const jobs: MigrationJobRecord[] = res.data || [];
+          setHistoryJobs(jobs);
+          // Keep activeJob in sync if it's tracked via single-job polling
+          setActiveJob((prev) => {
+            if (!prev) return prev;
+            return jobs.find((j) => j.jobId === prev.jobId) ?? prev;
+          });
+          const anyActive = jobs.some(
+            (j) => j.status === "pending" || j.status === "running",
+          );
+          if (!anyActive) {
+            clearInterval(historyPollRef.current!);
+            historyPollRef.current = null;
+          }
+        }
+      } catch {
+        // ignore transient errors
+      }
+    }, 2500);
+  }, [domain]);
+
+  // Per-job poller for the single-migration progress panel
   const startPolling = useCallback(
     (jobId: string) => {
       if (pollRef.current) clearInterval(pollRef.current);
+      startHistoryPoll(); // also keep history live
       pollRef.current = setInterval(async () => {
         try {
           const res = await adminGetMigrationJob(domain, jobId);
@@ -444,7 +481,6 @@ export default function MigrationTab() {
               clearInterval(pollRef.current!);
               pollRef.current = null;
               setPhase(res.data.status === "completed" ? "done" : "error");
-              loadHistory();
             }
           }
         } catch {
@@ -452,12 +488,13 @@ export default function MigrationTab() {
         }
       }, 2500);
     },
-    [domain, loadHistory],
+    [domain, startHistoryPoll],
   );
 
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (historyPollRef.current) clearInterval(historyPollRef.current);
     };
   }, []);
 
@@ -482,6 +519,24 @@ export default function MigrationTab() {
     } catch {
       setTestResult({ message: "Connection failed" });
       setPhase("error");
+    }
+  };
+
+  const handleTestDestination = async () => {
+    setDstTestState("testing");
+    setDstTestMsg(null);
+    try {
+      const res = await adminTestMigrationDestination(domain);
+      if (res?.success) {
+        setDstTestState("ok");
+        setDstTestMsg(res.message);
+      } else {
+        setDstTestState("error");
+        setDstTestMsg(res?.message || "Destination unreachable");
+      }
+    } catch {
+      setDstTestState("error");
+      setDstTestMsg("Failed to reach destination server");
     }
   };
 
@@ -594,7 +649,8 @@ export default function MigrationTab() {
           unmatched: res.data?.unmatched,
         });
         setBulkPhase("done");
-        loadHistory();
+        // Kick off the history poller so the table stays live until all jobs settle
+        startHistoryPoll();
       } else {
         setBulkPhase("error");
       }
@@ -708,7 +764,7 @@ export default function MigrationTab() {
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button
             onClick={handleTest}
             disabled={busy || !form.imapHost || !form.username || !form.password}
@@ -720,11 +776,37 @@ export default function MigrationTab() {
               </>
             ) : (
               <>
-                <TestTube2 size={14} /> Test Connection
+                <TestTube2 size={14} /> Test Source
               </>
             )}
           </Button>
+
+          <button
+            onClick={handleTestDestination}
+            disabled={dstTestState === "testing"}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            {dstTestState === "testing" ? (
+              <><Loader2 size={14} className="animate-spin" /> Testing destination…</>
+            ) : (
+              <><TestTube2 size={14} /> Test Destination (mailcow)</>
+            )}
+          </button>
         </div>
+
+        {/* Destination test result */}
+        {dstTestMsg && (
+          <div className={`mt-3 flex items-start gap-2 p-3 rounded-lg text-sm ${
+            dstTestState === "ok"
+              ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+              : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+          }`}>
+            {dstTestState === "ok"
+              ? <CheckCircle size={16} className="mt-0.5 shrink-0" />
+              : <XCircle size={16} className="mt-0.5 shrink-0" />}
+            <span>{dstTestMsg}</span>
+          </div>
+        )}
       </div>
 
       {/* Migration Options */}

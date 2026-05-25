@@ -124,7 +124,11 @@ function HistoryTable({
   onRefresh: () => void;
   loading: boolean;
 }) {
-  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  // Auto-expand the most recent active job so progress is visible immediately
+  const firstActiveId = jobs.find(
+    (j) => j.status === "pending" || j.status === "running",
+  )?.jobId ?? null;
+  const [expandedJob, setExpandedJob] = useState<string | null>(firstActiveId);
 
   if (!jobs.length) return null;
 
@@ -193,24 +197,66 @@ function HistoryTable({
                       <ProgressBar value={p} />
                     </div>
                   )}
-                  {job.mailboxes.map((mb) => (
-                    <div
-                      key={mb.address}
-                      className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-xs space-y-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-gray-700 dark:text-gray-300">
-                          {mb.address}
-                        </span>
-                        <StatusBadge status={mb.status} />
+                  {job.mailboxes.map((mb) => {
+                    const mbPct = pct(mb.copiedMessages, mb.totalMessages);
+                    return (
+                      <div
+                        key={mb.address}
+                        className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-xs space-y-2"
+                      >
+                        {/* Header row */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-gray-700 dark:text-gray-300 truncate">
+                            {mb.address}
+                          </span>
+                          <StatusBadge status={mb.status} />
+                        </div>
+
+                        {/* Progress bar (shown once we know the total) */}
+                        {mb.totalMessages > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-gray-400">
+                              <span>
+                                <span className="text-green-600 dark:text-green-400 font-medium">
+                                  {mb.copiedMessages}
+                                </span>
+                                {" / "}
+                                {mb.totalMessages} msgs
+                                {mb.failedMessages > 0 && (
+                                  <span className="text-red-400 ml-1">
+                                    · {mb.failedMessages} failed
+                                  </span>
+                                )}
+                              </span>
+                              <span className="tabular-nums">{mbPct}%</span>
+                            </div>
+                            <ProgressBar value={mbPct} />
+                          </div>
+                        )}
+
+                        {/* No total yet but running */}
+                        {mb.totalMessages === 0 && mb.status === "running" && (
+                          <p className="text-gray-400 flex items-center gap-1">
+                            <Loader2 size={10} className="animate-spin" /> Counting messages…
+                          </p>
+                        )}
+
+                        {/* Current folder while running */}
+                        {mb.currentFolder && mb.status === "running" && (
+                          <p className="text-gray-400 truncate">
+                            Folder:{" "}
+                            <span className="font-mono text-gray-500 dark:text-gray-300">
+                              {mb.currentFolder}
+                            </span>
+                          </p>
+                        )}
+
+                        {mb.error && (
+                          <p className="text-red-500 break-words">{mb.error}</p>
+                        )}
                       </div>
-                      <p className="text-gray-400">
-                        {mb.copiedMessages} copied · {mb.failedMessages} failed
-                        {mb.totalMessages ? ` · ${mb.totalMessages} total` : ""}
-                      </p>
-                      {mb.error && <p className="text-red-500">{mb.error}</p>}
-                    </div>
-                  ))}
+                    );
+                  })}
                   {job.completedAt && (
                     <p className="text-xs text-gray-400">Completed: {fmtDate(job.completedAt)}</p>
                   )}

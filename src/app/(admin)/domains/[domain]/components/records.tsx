@@ -16,6 +16,12 @@ type RecordsData = {
   dkim?: any;
   dmarc?: any;
   auth?: { mxOk: boolean; spfOk: boolean; dkimOk: boolean; dmarcOk: boolean };
+  deliverability?: {
+    ip: string | null;
+    ptr: string | null;
+    ptrOk: boolean;
+    blacklists: { zone: string; listed: boolean }[];
+  };
 };
 
 const isVerified = (source?: string) => source === "verified";
@@ -80,7 +86,9 @@ export default function RecordsTab({
     : [];
 
   const auth = records.auth;
+  const deliverability = records.deliverability;
   const missingAuth = auth && (!auth.spfOk || !auth.dkimOk);
+  const hasBlacklisted = deliverability?.blacklists.some((b) => b.listed);
 
   return (
     <div className="space-y-6">
@@ -127,6 +135,25 @@ export default function RecordsTab({
         <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-900/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle size={16} />
           <span>DNS verified — domain is active.</span>
+        </div>
+      )}
+
+      {/* PTR warning — shown on active domains with missing reverse DNS */}
+      {domainStatus === "ACTIVE" && deliverability && !deliverability.ptrOk && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-800/40 dark:bg-orange-900/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium text-sm text-orange-800 dark:text-orange-300">
+                Reverse DNS (PTR) not configured
+              </p>
+              <p className="text-sm text-orange-700 dark:text-orange-400">
+                Your mail server IP{deliverability.ip ? ` (${deliverability.ip})` : ""} has no reverse DNS record.
+                Gmail, Outlook, and others use this as a spam signal. Contact your VPS/hosting provider
+                and set the PTR/reverse DNS for this IP to match your mail server hostname.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -188,6 +215,82 @@ export default function RecordsTab({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Mail server deliverability */}
+      {deliverability && (
+        <div className={card_className}>
+          <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">
+            Mail Server Deliverability
+          </h4>
+
+          {/* PTR row */}
+          <div className="space-y-2 mb-4">
+            <div className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2">
+              <div className="text-sm">
+                <p className="text-gray-800 dark:text-white/90 font-medium">
+                  Reverse DNS (PTR)
+                  {deliverability.ip && (
+                    <span className="ml-2 text-xs text-gray-500 font-mono">{deliverability.ip}</span>
+                  )}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {deliverability.ptrOk
+                    ? `Resolves to ${deliverability.ptr}`
+                    : deliverability.ptr
+                    ? `Resolves to ${deliverability.ptr} — expected mail server hostname`
+                    : deliverability.ip
+                    ? "No PTR record — set reverse DNS at your hosting provider"
+                    : "Could not resolve mail server IP"}
+                </p>
+                {!deliverability.ptrOk && deliverability.ip && (
+                  <p className="text-xs text-red-500 mt-1 font-medium">
+                    Missing PTR is a common cause of emails going to spam. Contact your VPS/hosting provider to set reverse DNS for {deliverability.ip} to match your mail server hostname.
+                  </p>
+                )}
+              </div>
+              <div className="shrink-0 ml-3">
+                {deliverability.ptrOk ? (
+                  <CheckCircle size={16} className="text-green-500" />
+                ) : (
+                  <XCircle size={16} className="text-red-500" />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Blacklist checks */}
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+            Blacklist Checks
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {deliverability.blacklists.map(({ zone, listed }) => (
+              <div
+                key={zone}
+                className={`flex items-center justify-between rounded-lg px-3 py-2 border text-xs ${
+                  listed
+                    ? "border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10"
+                    : "border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-900/10"
+                }`}
+              >
+                <span className={`font-mono ${listed ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
+                  {zone}
+                </span>
+                {listed ? (
+                  <XCircle size={14} className="text-red-500 shrink-0" />
+                ) : (
+                  <CheckCircle size={14} className="text-green-500 shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {hasBlacklisted && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+              Your mail server IP is listed on one or more blacklists. Submit a delisting request to each affected blacklist.
+            </div>
+          )}
         </div>
       )}
 

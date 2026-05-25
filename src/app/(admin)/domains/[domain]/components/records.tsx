@@ -15,10 +15,12 @@ type RecordsData = {
   spf?: any;
   dkim?: any;
   dmarc?: any;
+  auth?: { mxOk: boolean; spfOk: boolean; dkimOk: boolean; dmarcOk: boolean };
 };
 
-const isValidSource = (source?: string) =>
-  source === "derived" || source === "mailcow";
+const isVerified = (source?: string) => source === "verified";
+const isMissing = (source?: string) => source === "missing";
+const isDerived = (source?: string) => source === "derived";
 
 export default function RecordsTab({
   records,
@@ -57,54 +59,28 @@ export default function RecordsTab({
 
   const mxRecords =
     records.mx?.map((r) => ({
-      type: r.type,
-      host: r.host,
-      value: r.value,
-      priority: r.priority,
-      valid: isValidSource(r.source),
+      type: r.type, host: r.host, value: r.value, priority: r.priority, source: r.source,
     })) ?? [];
 
   const autodiscoverRecords =
     records.autodiscover?.map((r) => ({
-      type: r.type,
-      host: r.host,
-      value: r.value,
-      priority: r.priority,
-      valid: isValidSource(r.source),
+      type: r.type, host: r.host, value: r.value, priority: r.priority, source: r.source,
     })) ?? [];
 
   const spfRecords = records.spf
-    ? [
-        {
-          type: records.spf.type,
-          host: records.spf.host,
-          value: records.spf.value,
-          valid: isValidSource(records.spf.source),
-        },
-      ]
+    ? [{ type: records.spf.type, host: records.spf.host, value: records.spf.value, source: records.spf.source }]
     : [];
 
   const dkimRecords = records.dkim
-    ? [
-        {
-          type: records.dkim.type,
-          host: records.dkim.host,
-          value: records.dkim.value,
-          valid: isValidSource(records.dkim.source),
-        },
-      ]
+    ? [{ type: records.dkim.type, host: records.dkim.host, value: records.dkim.value, source: records.dkim.source }]
     : [];
 
   const dmarcRecords = records.dmarc
-    ? [
-        {
-          type: records.dmarc.type,
-          host: records.dmarc.host,
-          value: records.dmarc.value,
-          valid: isValidSource(records.dmarc.source),
-        },
-      ]
+    ? [{ type: records.dmarc.type, host: records.dmarc.host, value: records.dmarc.value, source: records.dmarc.source }]
     : [];
+
+  const auth = records.auth;
+  const missingAuth = auth && (!auth.spfOk || !auth.dkimOk);
 
   return (
     <div className="space-y-6">
@@ -151,6 +127,67 @@ export default function RecordsTab({
         <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-900/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle size={16} />
           <span>DNS verified — domain is active.</span>
+        </div>
+      )}
+
+      {/* Spam warning — shown on active domains with missing auth records */}
+      {domainStatus === "ACTIVE" && missingAuth && (
+        <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10 p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium text-sm text-red-800 dark:text-red-300">
+                Outgoing emails will likely go to spam
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-400">
+                {[!auth?.spfOk && "SPF", !auth?.dkimOk && "DKIM"]
+                  .filter(Boolean)
+                  .join(" and ")}{" "}
+                {(!auth?.spfOk && !auth?.dkimOk) ? "records are" : "record is"} missing from DNS.
+                Add {(!auth?.spfOk && !auth?.dkimOk) ? "them" : "it"} using the values below.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email authentication summary */}
+      {auth && (
+        <div className={card_className}>
+          <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">
+            Email Authentication
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {(
+              [
+                { label: "MX", ok: auth.mxOk, desc: "Mail delivery" },
+                { label: "SPF", ok: auth.spfOk, desc: "Sender policy" },
+                { label: "DKIM", ok: auth.dkimOk, desc: "Mail signing" },
+                { label: "DMARC", ok: auth.dmarcOk, desc: "Spoofing protection" },
+              ] as const
+            ).map(({ label, ok, desc }) => (
+              <div
+                key={label}
+                className={`rounded-xl p-3 text-center border ${
+                  ok
+                    ? "border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-900/10"
+                    : "border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/10"
+                }`}
+              >
+                <div className="flex justify-center mb-1">
+                  {ok ? (
+                    <CheckCircle size={18} className="text-green-500" />
+                  ) : (
+                    <XCircle size={18} className="text-red-500" />
+                  )}
+                </div>
+                <p className={`text-sm font-bold ${ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+                  {label}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -277,43 +314,38 @@ function DNSRecord({
   return (
     <div className={card_className}>
       <div className="mb-4">
-        <h4 className="font-semibold text-gray-800 dark:text-white/90">
-          {title}
-        </h4>
-        <p className="text-sm text-gray-700 dark:text-gray-500">
-          {description}
-        </p>
+        <h4 className="font-semibold text-gray-800 dark:text-white/90">{title}</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-500">{description}</p>
       </div>
 
       <div className="space-y-3">
         {records.map((r, idx) => (
           <div
             key={idx}
-            className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
+            className="flex items-start justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-800 gap-3"
           >
-            <div className="text-sm">
+            <div className="text-sm min-w-0">
               <p className="text-gray-800 dark:text-white/90">
-                <strong>{r.type}</strong> {r.host}
+                <strong>{r.type}</strong>{" "}
+                <span className="font-mono text-xs text-gray-500">{r.host}</span>
               </p>
-              <p className="break-all text-gray-700 dark:text-gray-500">
-                {r.value}
-              </p>
+              <p className="break-all text-gray-700 dark:text-gray-500 mt-0.5">{r.value}</p>
               {r.priority !== undefined && (
-                <p className="text-xs text-gray-500">
-                  Priority: {r.priority}
-                </p>
+                <p className="text-xs text-gray-500 mt-0.5">Priority: {r.priority}</p>
+              )}
+              {isMissing(r.source) && (
+                <p className="text-xs text-red-500 mt-1 font-medium">Not found in DNS — add this record</p>
               )}
             </div>
 
-            <div className="flex items-center gap-3">
-              {r.valid ? (
-                <CheckCircle className="text-green-500" size={18} />
-              ) : (
-                <XCircle className="text-red-500" size={18} />
-              )}
+            <div className="flex items-center gap-2 shrink-0">
+              {isVerified(r.source) && <CheckCircle className="text-green-500" size={16} />}
+              {isMissing(r.source) && <XCircle className="text-red-500" size={16} />}
+              {isDerived(r.source) && <span className="w-4" />}
               <button
                 onClick={() => navigator.clipboard.writeText(r.value)}
                 className="text-gray-400 hover:text-gray-600"
+                title="Copy value"
               >
                 <Copy size={16} />
               </button>

@@ -157,8 +157,11 @@ export const adminGetMigrationJob = (domain: string, jobId: string) =>
 export const adminTestMigrationDestination = (domain: string) =>
   getDoc(`${BASE}/domains/${domain}/migration/dst-test`);
 
-export const adminUploadMigration = (domain: string, formData: FormData) =>
-  postFormDoc(`${BASE}/domains/${domain}/migration/upload`, formData);
+export const adminUploadMigration = (
+  domain: string,
+  formData: FormData,
+  onProgress?: (pct: number) => void,
+) => postFormDoc(`${BASE}/domains/${domain}/migration/upload`, formData, onProgress);
 
 // ─── Transactional Email ──────────────────────────────────────────────────────
 export const adminGetTransactionalKeys = () =>

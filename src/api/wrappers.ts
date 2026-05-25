@@ -61,9 +61,20 @@ export const patchDoc = async (url: string, form: any, log: boolean = false) => 
   }
 };
 
-export const postFormDoc = async (url: string, formData: FormData, log: boolean = false) => {
+export const postFormDoc = async (
+  url: string,
+  formData: FormData,
+  onProgress?: (pct: number) => void,
+  log: boolean = false,
+) => {
   try {
-    const res = await Instance.post(url, formData);
+    const res = await Instance.post(url, formData, {
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      },
+    });
     return res.data;
   } catch (err) {
     return handleAuthErr(err, log);

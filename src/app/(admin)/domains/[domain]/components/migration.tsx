@@ -234,6 +234,7 @@ function UploadArchiveSection({
   const [file, setFile] = useState<File | null>(null);
   const [targetMailbox, setTargetMailbox] = useState("");
   const [phase, setPhase] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [uploadPct, setUploadPct] = useState(0);
   const [result, setResult] = useState<{ jobId: string; mailboxCount: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -254,13 +255,14 @@ function UploadArchiveSection({
   const handleUpload = async () => {
     if (!file) return;
     setPhase("uploading");
+    setUploadPct(0);
     setResult(null);
     setError(null);
     const formData = new FormData();
     formData.append("file", file);
     if (targetMailbox.trim()) formData.append("targetMailbox", targetMailbox.trim());
     try {
-      const res = await adminUploadMigration(domain, formData);
+      const res = await adminUploadMigration(domain, formData, setUploadPct);
       if (res?.success) {
         setResult(res.data);
         setPhase("done");
@@ -356,6 +358,29 @@ function UploadArchiveSection({
         </div>
       )}
 
+      {/* Upload progress bar */}
+      {phase === "uploading" && (
+        <div className="mt-4 space-y-1.5">
+          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <Loader2 size={11} className="animate-spin" /> Uploading archive…
+            </span>
+            <span className="font-medium tabular-nums">{uploadPct}%</span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all duration-200"
+              style={{ width: `${uploadPct}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-400">
+            {uploadPct < 100
+              ? "Sending file to server…"
+              : "Processing zip and starting import…"}
+          </p>
+        </div>
+      )}
+
       <div className="mt-4">
         <Button
           onClick={handleUpload}
@@ -364,7 +389,7 @@ function UploadArchiveSection({
         >
           {busy ? (
             <>
-              <Loader2 size={14} className="animate-spin" /> Uploading…
+              <Loader2 size={14} className="animate-spin" /> {uploadPct < 100 ? `Uploading ${uploadPct}%` : "Processing…"}
             </>
           ) : (
             <>

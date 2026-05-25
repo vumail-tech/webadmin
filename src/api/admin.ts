@@ -1,4 +1,4 @@
-import { getDoc, postDoc, patchDoc, deleteDoc, putDoc } from "./wrappers";
+import { getDoc, postDoc, patchDoc, deleteDoc, putDoc, postFormDoc } from "./wrappers";
 
 const BASE = "/admin";
 
@@ -156,6 +156,9 @@ export const adminGetMigrationJob = (domain: string, jobId: string) =>
 
 export const adminTestMigrationDestination = (domain: string) =>
   getDoc(`${BASE}/domains/${domain}/migration/dst-test`);
+
+export const adminUploadMigration = (domain: string, formData: FormData) =>
+  postFormDoc(`${BASE}/domains/${domain}/migration/upload`, formData);
 
 // ─── Transactional Email ──────────────────────────────────────────────────────
 export const adminGetTransactionalKeys = () =>

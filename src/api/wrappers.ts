@@ -61,6 +61,15 @@ export const patchDoc = async (url: string, form: any, log: boolean = false) => 
   }
 };
 
+export const postFormDoc = async (url: string, formData: FormData, log: boolean = false) => {
+  try {
+    const res = await Instance.post(url, formData);
+    return res.data;
+  } catch (err) {
+    return handleAuthErr(err, log);
+  }
+};
+
 export const deleteDoc = async (url: string, log: boolean = false) => {
   try {
     const res = await Instance.delete(url);

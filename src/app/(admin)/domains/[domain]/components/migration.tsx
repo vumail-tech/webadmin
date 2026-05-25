@@ -21,6 +21,7 @@ import Input from "@/components/form/input/InputField";
 import {
   adminBulkMigration,
   adminGetMigrationJobs,
+  adminUploadMigration,
 } from "@/api/admin";
 import { card_className } from "./config";
 
@@ -223,6 +224,159 @@ function HistoryTable({
   );
 }
 
+function UploadArchiveSection({
+  domain,
+  onJobStarted,
+}: {
+  domain: string;
+  onJobStarted: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [targetMailbox, setTargetMailbox] = useState("");
+  const [phase, setPhase] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [result, setResult] = useState<{ jobId: string; mailboxCount: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const busy = phase === "uploading";
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) setFile(f);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f && f.name.endsWith(".zip")) setFile(f);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setPhase("uploading");
+    setResult(null);
+    setError(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    if (targetMailbox.trim()) formData.append("targetMailbox", targetMailbox.trim());
+    try {
+      const res = await adminUploadMigration(domain, formData);
+      if (res?.success) {
+        setResult(res.data);
+        setPhase("done");
+        setFile(null);
+        setTargetMailbox("");
+        onJobStarted();
+      } else {
+        setError(res?.message || "Upload failed");
+        setPhase("error");
+      }
+    } catch {
+      setError("Upload failed. Check the file and try again.");
+      setPhase("error");
+    }
+  };
+
+  return (
+    <div className={card_className}>
+      <div className="flex items-center gap-2 mb-1">
+        <Upload size={16} className="text-gray-500" />
+        <h4 className="text-sm font-semibold text-gray-800 dark:text-white">
+          Upload Mail Archive
+        </h4>
+      </div>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Upload a <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">.zip</code> of
+        Maildir files exported from another server. Folder names inside the zip must match mailbox
+        local parts on <strong>{domain}</strong> (e.g.{" "}
+        <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">sales/</code>,{" "}
+        <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">info/</code>).
+      </p>
+
+      {/* Drop zone */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
+        onClick={() => !busy && fileRef.current?.click()}
+        className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-6 cursor-pointer transition-colors ${
+          file
+            ? "border-blue-400 bg-blue-50 dark:bg-blue-500/10"
+            : "border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+        } ${busy ? "pointer-events-none opacity-50" : ""}`}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <Upload size={22} className={file ? "text-blue-500" : "text-gray-400"} />
+        {file ? (
+          <div className="text-center">
+            <p className="text-sm font-medium text-blue-700 dark:text-blue-300">{file.name}</p>
+            <p className="text-xs text-gray-400">
+              {(file.size / 1024 / 1024).toFixed(1)} MB — click to change
+            </p>
+          </div>
+        ) : (
+          <div className="text-center">
+            <p className="text-sm text-gray-500">Drop a .zip here or click to browse</p>
+            <p className="text-xs text-gray-400">Maildir structure (.zip)</p>
+          </div>
+        )}
+      </div>
+
+      {/* Optional target mailbox for single-mailbox zips */}
+      <div className="mt-3 space-y-1">
+        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+          Target Mailbox{" "}
+          <span className="font-normal text-gray-400">(only needed for single-mailbox zips)</span>
+        </label>
+        <input
+          type="text"
+          placeholder={`e.g. user@${domain}`}
+          value={targetMailbox}
+          onChange={(e) => setTargetMailbox(e.target.value)}
+          disabled={busy}
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm dark:bg-gray-800 dark:text-white disabled:opacity-50"
+        />
+      </div>
+
+      {/* Feedback */}
+      {phase === "done" && result && (
+        <div className="mt-3 flex items-center gap-2 p-3 rounded-lg text-sm bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+          <CheckCircle size={14} />
+          Import started for {result.mailboxCount} mailbox(es). Track progress below.
+        </div>
+      )}
+      {phase === "error" && error && (
+        <div className="mt-3 flex items-center gap-2 p-3 rounded-lg text-sm bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400">
+          <XCircle size={14} /> {error}
+        </div>
+      )}
+
+      <div className="mt-4">
+        <Button
+          onClick={handleUpload}
+          disabled={busy || !file}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+        >
+          {busy ? (
+            <>
+              <Loader2 size={14} className="animate-spin" /> Uploading…
+            </>
+          ) : (
+            <>
+              <Upload size={14} /> Upload &amp; Import
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function MigrationTab() {
   const { domain } = useParams() as { domain: string };
 
@@ -336,6 +490,16 @@ export default function MigrationTab() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Upload Archive */}
+      <UploadArchiveSection domain={domain} onJobStarted={startHistoryPoll} />
+
+      {/* Divider */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+        <span className="text-xs text-gray-400 shrink-0">or migrate via IMAP</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+      </div>
+
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1">

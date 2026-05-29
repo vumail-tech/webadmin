@@ -4,7 +4,7 @@ import qs from "qs";
 const handleAuthErr = (err: any, log: boolean = false) => {
   const { response } = err || {};
   const data = response?.data;
-  const message = data?.message || data?.errorMessage || "Server Error!";
+  const message = data?.message || data?.errorMessage || data?.error || "Server Error!";
   const code = response?.status;
 
   if (code === 401 && typeof window !== "undefined") {

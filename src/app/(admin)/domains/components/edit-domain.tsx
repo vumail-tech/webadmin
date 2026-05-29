@@ -33,7 +33,8 @@ export default function EditDomainModal({
     try {
       const payload: Record<string, any> = { active };
       if (description.trim()) payload.description = description.trim();
-      if (maxquota) payload.maxquota = parseInt(maxquota);
+      // Input is in GB — convert to MB for the API
+      if (maxquota) payload.maxquota = Math.round(parseFloat(maxquota) * 1024);
 
       const rs = await adminUpdateDomain(domain.domain, payload);
       if (rs?.success) {
@@ -61,8 +62,8 @@ export default function EditDomainModal({
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Max Quota (MB)</label>
-          <Input type="number" placeholder="10240" value={maxquota} onChange={(e) => setMaxquota(e.target.value)} />
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Max Quota (GB)</label>
+          <Input type="number" placeholder="10" value={maxquota} onChange={(e) => setMaxquota(e.target.value)} />
         </div>
 
         <div className="flex items-center gap-3">

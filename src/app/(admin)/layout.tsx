@@ -4,6 +4,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import { AppSidebar } from "@/layout/app-sidebar";
 import AppHeader from "@/layout/AppHeader";
 import Backdrop from "@/layout/Backdrop";
+import EmailVerificationBanner from "@/components/auth/EmailVerificationBanner";
 import { storage } from "@/storage/helpers";
 import { useAuthStore } from "@/stores/auth-store";
 import { useRouter } from "next/navigation";
@@ -55,6 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AppSidebar />
       <Backdrop />
       <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
+        <EmailVerificationBanner />
         <AppHeader />
         <div className="p-4 mx-auto md:p-6">{children}</div>
       </div>

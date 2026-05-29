@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, Copy, XCircle, ShieldCheck, Loader2, AlertTriangle, Zap } from "lucide-react";
+import { CheckCircle, Copy, XCircle, ShieldCheck, Loader2, AlertTriangle } from "lucide-react";
 import { card_className } from "./config";
-import { adminVerifyDomainDNS, adminConfigureCloudflare } from "@/api/admin";
-import { Modal } from "@/components/ui/modal";
-import Input from "@/components/form/input/InputField";
+import { adminVerifyDomainDNS } from "@/api/admin";
 import { useParams } from "next/navigation";
 
 type RecordsData = {
@@ -41,19 +39,15 @@ export default function RecordsTab({
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const [showCloudflare, setShowCloudflare] = useState(false);
-  const [cfToken, setCfToken] = useState("");
-  const [cfZoneId, setCfZoneId] = useState("");
-  const [cfLoading, setCfLoading] = useState(false);
-  const [cfResult, setCfResult] = useState<{ success: boolean; results: any[] } | null>(null);
-
   const handleVerify = async () => {
     setVerifying(true);
     setVerifyResult(null);
     try {
       const rs = await adminVerifyDomainDNS(domain);
-      setVerifyResult({ success: !!rs?.success && rs.verified, message: rs?.message || "Verification failed" });
-      if (rs?.success && rs.verified) onVerified?.();
+      const failed = rs?.status === "fail" || (!rs?.success && !rs?.verified);
+      const message = rs?.message || rs?.error || (failed ? "Verification failed." : "Verified.");
+      setVerifyResult({ success: !!rs?.success && !!rs?.verified, message });
+      if (rs?.success && rs?.verified) onVerified?.();
     } catch {
       setVerifyResult({ success: false, message: "An error occurred during verification." });
     } finally {
@@ -122,12 +116,6 @@ export default function RecordsTab({
             >
               {verifying ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
               {verifying ? "Checking DNS…" : "Verify DNS Records"}
-            </button>
-            <button
-              onClick={() => setShowCloudflare(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm border border-orange-300 text-orange-600 dark:border-orange-700 dark:text-orange-400 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20"
-            >
-              <Zap size={14} /> Auto-configure with Cloudflare
             </button>
           </div>
         </div>
@@ -324,81 +312,6 @@ export default function RecordsTab({
         records={dmarcRecords}
       />
 
-      {/* Cloudflare auto-configure modal */}
-      <Modal isOpen={showCloudflare} onClose={() => { setShowCloudflare(false); setCfResult(null); }} className="max-w-md">
-        <div className="space-y-4">
-          <div>
-            <h2 className="font-semibold text-gray-800 dark:text-white">Auto-configure DNS via Cloudflare</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Paste your Cloudflare API token and Zone ID. All required DNS records will be created automatically.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">API Token</label>
-              <Input
-                type="password"
-                placeholder="Your Cloudflare API token"
-                value={cfToken}
-                onChange={(e) => setCfToken(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Zone ID</label>
-              <Input
-                type="text"
-                placeholder="e.g. abc123def456..."
-                value={cfZoneId}
-                onChange={(e) => setCfZoneId(e.target.value)}
-              />
-              <p className="text-xs text-gray-400">Found in your Cloudflare domain overview page.</p>
-            </div>
-          </div>
-
-          {cfResult && (
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-              {cfResult.results.map((r, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-gray-700 dark:text-gray-300 font-mono text-xs">{r.record}</span>
-                  {r.status === "error"
-                    ? <span className="text-red-500 text-xs">{r.error || "Error"}</span>
-                    : <CheckCircle size={14} className="text-green-500" />
-                  }
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => { setShowCloudflare(false); setCfResult(null); }}
-              className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-            >
-              {cfResult ? "Close" : "Cancel"}
-            </button>
-            {!cfResult && (
-              <button
-                onClick={async () => {
-                  if (!cfToken || !cfZoneId) return;
-                  setCfLoading(true);
-                  try {
-                    const rs = await adminConfigureCloudflare(domain, { apiToken: cfToken, zoneId: cfZoneId });
-                    setCfResult(rs);
-                  } finally {
-                    setCfLoading(false);
-                  }
-                }}
-                disabled={cfLoading || !cfToken || !cfZoneId}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-60"
-              >
-                {cfLoading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                {cfLoading ? "Configuring…" : "Configure DNS"}
-              </button>
-            )}
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

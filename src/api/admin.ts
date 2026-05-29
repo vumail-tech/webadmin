@@ -82,10 +82,6 @@ export const adminToggleAlias = (
 export const adminVerifyDomainDNS = (domain: string) =>
   postDoc(`${BASE}/domains/${domain}/dns/verify`, {});
 
-export const adminConfigureCloudflare = (
-  domain: string,
-  data: { apiToken: string; zoneId: string }
-) => postDoc(`${BASE}/domains/${domain}/dns/cloudflare`, data);
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 export const adminGetStorage = (domain: string) =>

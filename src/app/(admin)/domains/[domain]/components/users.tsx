@@ -1,22 +1,17 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { ApexOptions } from "apexcharts";
 import { cn } from "@/lib/utils";
 import { card_className } from "./config";
 import { useModal } from "@/hooks/useModal";
 import AddUserModal from "./add-user";
 import { SignatureModal } from "./signature-modal";
-import { Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, AlertTriangle, PenLine, KeyRound, Copy, Check } from "lucide-react";
+import { Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, AlertTriangle, PenLine, KeyRound, Copy, Check, Mail, ShieldCheck, ShieldOff } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { adminGetMailboxes, adminDeleteMailbox, adminUpdateMailbox, adminResetMailboxPassword } from "@/api/admin";
 import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
-import Link from "next/link";
-
-const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 type Mailbox = {
   id: string;
@@ -29,8 +24,37 @@ type Mailbox = {
   quotaUsedMB: number;
   quotaMB: number;
   usedPercent: number;
-  sentStats: number[];
+  messages: number;
+  lastImapLogin: number | null;
+  lastSmtpLogin: number | null;
+  lastPop3Login: number | null;
+  tlsEnforceIn: boolean;
+  tlsEnforceOut: boolean;
+  createdAt: string;
 };
+
+function formatStorage(mb: number): string {
+  if (!mb || mb === 0) return "0 B";
+  const bytes = mb * 1024 * 1024;
+  if (bytes < 1024) return `${bytes.toFixed(0)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+function formatLogin(ts: number | null): string {
+  if (!ts) return "Never";
+  const d = new Date(ts * 1000);
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString();
+}
 
 export function UsersTable({ domainStatus }: { domainStatus?: string }) {
   const { openModal, isOpen, closeModal } = useModal();
@@ -98,7 +122,8 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
     try {
       await adminUpdateMailbox(domain, editTarget.id, {
         active: editActive,
-        ...(editQuota ? { quotaMB: parseInt(editQuota) } : {}),
+        // editQuota is in GB — convert to MB before sending
+        ...(editQuota ? { quotaMB: Math.round(parseFloat(editQuota) * 1024) } : {}),
       });
       setEditTarget(null);
       fetchMailboxes();
@@ -109,7 +134,8 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
 
   const openEdit = (mb: Mailbox) => {
     setEditTarget(mb);
-    setEditQuota(String(mb.quotaMB));
+    // Show quota in GB
+    setEditQuota(mb.quotaMB ? (mb.quotaMB / 1024).toFixed(1) : "");
     setEditActive(mb.active);
     setOpenMenu(null);
   };
@@ -129,14 +155,6 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
     navigator.clipboard.writeText(newPassword);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const sparklineOptions: ApexOptions = {
-    chart: { type: "area", sparkline: { enabled: true } },
-    stroke: { curve: "smooth", width: 2 },
-    fill: { opacity: 0.3 },
-    tooltip: { enabled: false },
-    colors: ["#465FFF"],
   };
 
   const storageColor = (pct: number) =>
@@ -207,11 +225,12 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Aliases</th>
+                <th className="px-4 py-3">Messages</th>
                 <th className="px-4 py-3">Storage</th>
+                <th className="px-4 py-3">TLS</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Activity</th>
+                <th className="px-4 py-3">Last Login</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
@@ -221,18 +240,26 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
                 return (
                   <tr key={mb.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-4 py-3"><input type="checkbox" /></td>
-                    <td className={row_className}>{mb.name || "—"}</td>
-                    <td className={`${row_className} font-medium`}>{mb.email}</td>
+                    <td className={row_className}>
+                      <div className="font-medium">{mb.name || "—"}</div>
+                      {mb.phone && <div className="text-xs text-gray-400">{mb.phone}</div>}
+                    </td>
+                    <td className={`${row_className} font-mono text-xs`}>{mb.email}</td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 capitalize">
                         {mb.role || "user"}
                       </span>
                     </td>
-                    <td className={row_className}>{mb.phone || "—"}</td>
                     <td className={row_className}>{mb.aliases ?? 0}</td>
                     <td className={row_className}>
+                      <div className="flex items-center gap-1">
+                        <Mail size={12} className="text-gray-400 shrink-0" />
+                        <span>{mb.messages?.toLocaleString() ?? 0}</span>
+                      </div>
+                    </td>
+                    <td className={row_className}>
                       <div className="flex items-center gap-2">
-                        <svg width="32" height="32">
+                        <svg width="32" height="32" className="shrink-0">
                           <circle cx="16" cy="16" r="14" strokeWidth="4" className="stroke-gray-200" fill="none" />
                           <circle
                             cx="16" cy="16" r="14" strokeWidth="4" fill="none"
@@ -242,7 +269,26 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
                             transform="rotate(-90 16 16)"
                           />
                         </svg>
-                        <span className="text-sm">{pct}%</span>
+                        <div>
+                          <div className="text-xs font-medium">{pct}%</div>
+                          <div className="text-xs text-gray-400">{formatStorage(mb.quotaUsedMB)} / {formatStorage(mb.quotaMB)}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <span title={`IMAP TLS: ${mb.tlsEnforceIn ? "Enforced" : "Optional"}`}>
+                          {mb.tlsEnforceIn
+                            ? <ShieldCheck size={14} className="text-green-500" />
+                            : <ShieldOff size={14} className="text-gray-400" />
+                          }
+                        </span>
+                        <span title={`SMTP TLS: ${mb.tlsEnforceOut ? "Enforced" : "Optional"}`}>
+                          {mb.tlsEnforceOut
+                            ? <ShieldCheck size={14} className="text-green-500" />
+                            : <ShieldOff size={14} className="text-gray-400" />
+                          }
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -255,13 +301,21 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
                         {mb.active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 w-28">
-                      <ReactApexChart
-                        options={sparklineOptions}
-                        series={[{ data: mb.sentStats || [0, 0, 0, 0, 0, 0, 0] }]}
-                        type="area"
-                        height={40}
-                      />
+                    <td className={row_className}>
+                      <div className="text-xs space-y-0.5">
+                        <div className="flex gap-1">
+                          <span className="text-gray-400 w-10">IMAP</span>
+                          <span>{formatLogin(mb.lastImapLogin)}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <span className="text-gray-400 w-10">POP3</span>
+                          <span>{formatLogin(mb.lastPop3Login)}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <span className="text-gray-400 w-10">SMTP</span>
+                          <span>{formatLogin(mb.lastSmtpLogin)}</span>
+                        </div>
+                      </div>
                     </td>
                     <td className={`${row_className} relative`}>
                       <div className="inline-block" data-menu-container>
@@ -320,7 +374,7 @@ export function UsersTable({ domainStatus }: { domainStatus?: string }) {
           <p className="text-sm text-gray-500">{editTarget?.email}</p>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Quota (MB)</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Quota (GB)</label>
             <Input type="number" value={editQuota} onChange={(e) => setEditQuota(e.target.value)} />
           </div>
 

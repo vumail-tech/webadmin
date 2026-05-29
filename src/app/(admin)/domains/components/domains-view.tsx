@@ -26,6 +26,7 @@ interface Domain {
     rejected: number;
     healthScore: number;
     healthLabel: string;
+    monthly?: { year: number; month: number; sent: number; received: number }[];
   } | null;
 }
 
@@ -158,8 +159,9 @@ export default function DomainsView() {
                   <th className="px-3 py-3">Domain</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Mailboxes</th>
-                  <th className="px-3 py-3">Sent (7d)</th>
+                  <th className="px-3 py-3">Sent</th>
                   <th className="px-3 py-3">Received</th>
+                  <th className="px-3 py-3">Deferred</th>
                   <th className="px-3 py-3">Spam</th>
                   <th className="px-3 py-3">Health</th>
                   <th className="px-3 py-3">Created</th>
@@ -189,21 +191,48 @@ export default function DomainsView() {
                       </span>
                     </td>
                     <td className="px-3 py-3">{domain.mailboxCount ?? 0}</td>
-                    <td className="px-3 py-3 w-[120px]">
-                      <ReactApexChart
-                        options={{
-                          chart: { sparkline: { enabled: true } },
-                          stroke: { curve: "smooth", width: 2 },
-                          colors: ["#465FFF"],
-                          tooltip: { enabled: false },
-                        }}
-                        series={[{ data: [0, domain.metrics?.sent ?? 0] }]}
-                        type="line"
-                        height={40}
-                      />
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{(domain.metrics?.sent ?? 0).toLocaleString()}</span>
+                        {(domain.metrics?.monthly?.length ?? 0) > 1 && (
+                          <ReactApexChart
+                            options={{
+                              chart: { sparkline: { enabled: true } },
+                              stroke: { curve: "smooth", width: 1.5 },
+                              colors: ["#465FFF"],
+                              tooltip: { enabled: false },
+                            }}
+                            series={[{ data: domain.metrics!.monthly!.map((m) => m.sent) }]}
+                            type="line"
+                            height={28}
+                            width={60}
+                          />
+                        )}
+                      </div>
                     </td>
-                    <td className="px-3 py-3">{domain.metrics?.received ?? 0}</td>
-                    <td className="px-3 py-3">{domain.metrics?.spam ?? 0}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{(domain.metrics?.received ?? 0).toLocaleString()}</span>
+                        {(domain.metrics?.monthly?.length ?? 0) > 1 && (
+                          <ReactApexChart
+                            options={{
+                              chart: { sparkline: { enabled: true } },
+                              stroke: { curve: "smooth", width: 1.5 },
+                              colors: ["#10b981"],
+                              tooltip: { enabled: false },
+                            }}
+                            series={[{ data: domain.metrics!.monthly!.map((m) => m.received) }]}
+                            type="line"
+                            height={28}
+                            width={60}
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-yellow-600 dark:text-yellow-400">
+                      {(domain.metrics?.deferred ?? 0).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3">{(domain.metrics?.spam ?? 0).toLocaleString()}</td>
                     <td className="px-3 py-3">
                       <span
                         className={`text-xs font-semibold ${

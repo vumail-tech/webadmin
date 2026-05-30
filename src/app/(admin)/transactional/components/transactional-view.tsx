@@ -104,7 +104,9 @@ export default function TransactionalView() {
     setTimeout(() => setKeyCopied(false), 2000);
   };
 
-  const codeSnippet = (domain: string, key: string) => `curl -X POST https://api.vumail.io/v1/send \\
+  const apiBase = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api`;
+
+  const codeSnippet = (domain: string, key: string) => `curl -X POST ${apiBase}/transactional/send \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -125,12 +127,12 @@ export default function TransactionalView() {
           </p>
         </div>
         <a
-          href="https://docs.vumail.io/transactional"
+          href={`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium"
         >
-          <BookOpen size={15} /> Docs
+          <BookOpen size={15} /> API Docs
         </a>
       </div>
 

@@ -17,10 +17,11 @@ import SecurityTab from "./components/security";
 import AdvancedTab from "./components/advanced";
 import MigrationTab from "./components/migration";
 import { DomainStatusType } from "@/types/domain";
-import { adminGetDomain, adminDeleteDomain } from "@/api/admin";
+import { adminGetDomain, adminDeleteDomain, adminGetDomainBilling } from "@/api/admin";
 import { Modal } from "@/components/ui/modal";
 import { useRouter } from "next/navigation";
 import EditDomainModal from "../components/edit-domain";
+import { DomainBillingCard, daysLeft, type DomainBilling } from "./components/billing-card";
 
 const TABS = [
   "overview", "users", "aliases", "records",
@@ -42,6 +43,7 @@ export default function DomainDetailView() {
   const [status, setStatus] = useState<DomainStatusType>("PENDING_DNS");
   const [records, setRecords] = useState<any>(null);
   const [metrics, setMetrics] = useState<any>(null);
+  const [billing, setBilling] = useState<DomainBilling | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [showEdit, setShowEdit] = useState(false);
@@ -64,8 +66,20 @@ export default function DomainDetailView() {
     }
   };
 
+  const fetchBilling = async () => {
+    try {
+      const res = await adminGetDomainBilling(domainName);
+      if (res?.success) setBilling(res.data);
+    } catch {
+      // billing is non-critical for the domain view
+    }
+  };
+
   useEffect(() => {
-    if (domainName) fetchDomain();
+    if (domainName) {
+      fetchDomain();
+      fetchBilling();
+    }
   }, [domainName]);
 
   return (
@@ -103,6 +117,30 @@ export default function DomainDetailView() {
         </div>
       </div>
 
+      {/* Billing banner */}
+      {billing?.subscription?.status === "past_due" && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-700/40 dark:bg-yellow-900/20 dark:text-yellow-300">
+          <span>
+            Payment is overdue. This domain will be suspended in{" "}
+            <strong>{daysLeft(billing.subscription.currentPeriodEnd)} day(s)</strong> unless paid.
+          </span>
+          <Link href="/billing" className="whitespace-nowrap font-medium underline">
+            Pay now
+          </Link>
+        </div>
+      )}
+      {billing?.subscription?.status === "suspended" && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+          <span>
+            This domain is <strong>suspended</strong> for non-payment. Mail delivery and login are
+            paused.
+          </span>
+          <Link href="/billing" className="whitespace-nowrap font-medium underline">
+            Reactivate
+          </Link>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-6 min-w-max" aria-label="Tabs">
@@ -125,7 +163,12 @@ export default function DomainDetailView() {
 
       {/* Tab Content */}
       <div className="space-y-6">
-        {activeTab === "overview" && <DomainOverview metrics={metrics} />}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            <DomainBillingCard billing={billing} />
+            <DomainOverview metrics={metrics} />
+          </div>
+        )}
         {activeTab === "users" && <UsersTable domainStatus={status} />}
         {activeTab === "aliases" && <AliasesTab />}
         {activeTab === "records" && (

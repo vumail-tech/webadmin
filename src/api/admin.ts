@@ -227,3 +227,54 @@ export const adminUpdateTemplate = (id: string, data: Record<string, any>) =>
 
 export const adminDeleteTemplate = (id: string) =>
   deleteDoc(`${BASE}/marketing/templates/${id}`);
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+export const adminGetPlans = () => getDoc(`${BASE}/billing/plans`);
+
+export const adminGetBillingOverview = () =>
+  getDoc(`${BASE}/billing/overview`);
+
+export const adminGetInvoices = (params?: { page?: number; limit?: number }) =>
+  getDoc(`${BASE}/billing/invoices`, { params });
+
+export const adminGetDomainBilling = (domain: string) =>
+  getDoc(`${BASE}/billing/domains/${domain}`);
+
+export const adminGetDomainInvoices = (domain: string) =>
+  getDoc(`${BASE}/billing/domains/${domain}/invoices`);
+
+export const adminSubscribeDomain = (domain: string, planKey: string) =>
+  postDoc(`${BASE}/billing/domains/${domain}/subscribe`, { planKey });
+
+export const adminChangePlan = (domain: string, planKey: string) =>
+  postDoc(`${BASE}/billing/domains/${domain}/change-plan`, { planKey });
+
+export const adminCancelSubscription = (domain: string) =>
+  postDoc(`${BASE}/billing/domains/${domain}/cancel`, {});
+
+// ─── Waitlists ────────────────────────────────────────────────────────────────
+export const getWaitlists = () => getDoc(`${BASE}/waitlists`);
+
+export const getWaitlist = (id: string) => getDoc(`${BASE}/waitlists/${id}`);
+
+export const createWaitlist = (data: {
+  name: string;
+  domain: string;
+  fields?: any[];
+  doubleOptIn?: boolean;
+  confirmation?: Record<string, any>;
+  allowedOrigins?: string[];
+}) => postDoc(`${BASE}/waitlists`, data);
+
+export const updateWaitlist = (id: string, data: Record<string, any>) =>
+  putDoc(`${BASE}/waitlists/${id}`, data);
+
+export const deleteWaitlist = (id: string) => deleteDoc(`${BASE}/waitlists/${id}`);
+
+export const regenerateWaitlistKey = (id: string) =>
+  postDoc(`${BASE}/waitlists/${id}/regenerate-key`, {});
+
+export const getWaitlistEntries = (
+  id: string,
+  params?: { page?: number; limit?: number; status?: string; search?: string },
+) => getDoc(`${BASE}/waitlists/${id}/entries`, { params });

@@ -18,6 +18,13 @@ interface Domain {
   status: "PENDING_DNS" | "ACTIVE" | "SUSPENDED";
   mailboxCount: number;
   createdAt: string;
+  subscription?: {
+    status: "trialing" | "active" | "past_due" | "suspended" | "canceled";
+    planKey?: string;
+    planName?: string | null;
+    trialEndsAt?: string;
+    currentPeriodEnd?: string;
+  } | null;
   metrics?: {
     sent: number;
     received: number;
@@ -34,6 +41,14 @@ const statusColors: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-400",
   PENDING_DNS: "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-400",
   SUSPENDED: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-400",
+};
+
+const subStatusColors: Record<string, string> = {
+  active: "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+  trialing: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+  past_due: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400",
+  suspended: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+  canceled: "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400",
 };
 
 export default function DomainsView() {
@@ -158,6 +173,7 @@ export default function DomainsView() {
                   </th>
                   <th className="px-3 py-3">Domain</th>
                   <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Plan</th>
                   <th className="px-3 py-3">Mailboxes</th>
                   <th className="px-3 py-3">Sent</th>
                   <th className="px-3 py-3">Received</th>
@@ -189,6 +205,24 @@ export default function DomainsView() {
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColors[domain.status] || ""}`}>
                         {domain.status.replace("_", " ")}
                       </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      {domain.subscription ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-gray-700 dark:text-gray-200">
+                            {domain.subscription.planName ?? "—"}
+                          </span>
+                          <span
+                            className={`w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              subStatusColors[domain.subscription.status] || ""
+                            }`}
+                          >
+                            {domain.subscription.status.replace("_", " ")}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">No plan</span>
+                      )}
                     </td>
                     <td className="px-3 py-3">{domain.mailboxCount ?? 0}</td>
                     <td className="px-3 py-3">

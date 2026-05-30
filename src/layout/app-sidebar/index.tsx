@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useSidebar } from "../../context/SidebarContext";
-import { MAIN_NAV, SUB_NAV } from "./config";
+import { MAIN_NAV, SUB_NAV, BOTTOM_NAV } from "./config";
 import { SidebarMenuItem } from "./sidebar-item";
 import { HorizontaLDots } from "@/icons";
 
@@ -99,6 +99,21 @@ export const AppSidebar = () => {
           )}
         </h2>
         {SUB_NAV.map((nav) => (
+          <SidebarMenuItem
+            key={nav.name}
+            nav={nav}
+            isActive={isActive}
+            isExpanded={isExpanded}
+            isHovered={isHovered}
+            isMobileOpen={isMobileOpen}
+          />
+        ))}
+      </nav>
+
+      {/* Pinned to the bottom */}
+      <nav className="mt-auto space-y-2 px-4 pb-24 lg:pb-6">
+        <div className="mb-2 border-t border-gray-100 dark:border-gray-800" />
+        {BOTTOM_NAV.map((nav) => (
           <SidebarMenuItem
             key={nav.name}
             nav={nav}
